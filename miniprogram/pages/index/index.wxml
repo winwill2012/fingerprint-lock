@@ -1,0 +1,39 @@
+<view class="page">
+
+  <!-- 状态卡片 -->
+  <view class="card">
+    <view class="row">
+      <view class="dot {{connected ? 'ok' : 'bad'}}"></view>
+      <text class="state">{{connected ? 'MQTT 已连接' : 'MQTT 未连接'}}</text>
+      <text class="sub right" wx:if="{{deviceOnline && status && status.ip}}">设备IP {{status.ip}}</text>
+      <text class="sub right" wx:elif="{{connected && !deviceOnline}}">设备离线</text>
+    </view>
+    <view class="row" wx:if="{{status}}">
+      <text class="battery">🔋 {{batteryText}}</text>
+      <text class="sub" style="margin-left:32rpx;">指纹 {{status.fp_count >= 0 ? status.fp_count : '-'}} 枚</text>
+    </view>
+    <view class="row" wx:else>
+      <text class="sub">等待设备上报状态…（可点下方刷新）</text>
+    </view>
+  </view>
+
+  <!-- 开锁按钮 -->
+  <view class="unlock-wrap">
+    <button
+      class="unlock-btn {{connected ? '' : 'disabled'}}"
+      hover-class="unlock-pressed"
+      bindtap="onUnlock"
+      disabled="{{!connected}}">
+      🔓 远程开锁
+    </button>
+    <text class="hint">点击后需二次确认 · 设备开锁脉冲 ≤ 500ms</text>
+  </view>
+
+  <!-- 最近事件 -->
+  <view class="card last" wx:if="{{lastEvent}}">
+    <text class="sub">最近事件：{{lastEvent}}</text>
+  </view>
+
+  <button class="btn-block refresh" bindtap="onStatus">刷新设备状态</button>
+
+</view>

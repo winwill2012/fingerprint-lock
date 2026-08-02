@@ -1,0 +1,41 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/fingerprint/fingerprint",
+    "pages/logs/logs",
+    "pages/settings/settings"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#1B66E9",
+    "navigationBarTitleText": "智能指纹锁",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#F4F6FB",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#8A9099",
+    "selectedColor": "#1B66E9",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "开锁"
+      },
+      {
+        "pagePath": "pages/fingerprint/fingerprint",
+        "text": "指纹"
+      },
+      {
+        "pagePath": "pages/logs/logs",
+        "text": "日志"
+      },
+      {
+        "pagePath": "pages/settings/settings",
+        "text": "设置"
+      }
+    ]
+  },
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

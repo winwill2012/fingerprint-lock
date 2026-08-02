@@ -1,0 +1,17 @@
+<view class="page">
+
+  <view class="card log-card" wx:for="{{logs}}" wx:key="index">
+    <view class="row">
+      <text class="tag">{{item.tag}}</text>
+      <text class="time">{{item.time}}</text>
+    </view>
+    <text class="content">{{item.content}}</text>
+  </view>
+
+  <view class="card empty" wx:if="{{!logs.length}}">
+    <text class="sub">暂无日志</text>
+  </view>
+
+  <button class="btn-block danger" bindtap="onClear" wx:if="{{logs.length}}">清空日志</button>
+
+</view>

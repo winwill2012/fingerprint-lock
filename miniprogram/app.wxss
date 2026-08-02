@@ -1,0 +1,75 @@
+page {
+  background: #F4F6FB;
+  color: #222;
+  font-size: 28rpx;
+}
+
+.page {
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+.card {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.sub {
+  color: #8A9099;
+  font-size: 24rpx;
+}
+
+.btn-sm {
+  margin-left: 16rpx;
+  font-size: 24rpx;
+  line-height: 2.2;
+  padding: 0 24rpx;
+  border-radius: 8rpx;
+  background: #F1F3F8;
+  color: #333;
+}
+
+.btn-sm.primary {
+  background: #1B66E9;
+  color: #FFF;
+}
+
+.btn-sm.danger {
+  background: #FDE8E8;
+  color: #E5484D;
+}
+
+.btn-block {
+  width: 100%;
+  margin-top: 24rpx;
+  background: #1B66E9;
+  color: #FFF;
+  border-radius: 12rpx;
+}
+
+.btn-block.danger {
+  background: #E5484D;
+}
+
+.dot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  margin-right: 12rpx;
+}
+
+.dot.ok {
+  background: #2FB75E;
+}
+
+.dot.bad {
+  background: #C4C9D2;
+}

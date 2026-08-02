@@ -1,0 +1,51 @@
+.topbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 24rpx;
+}
+
+.enroll-panel {
+  display: flex;
+  align-items: center;
+  border: 2rpx solid #1B66E9;
+  background: #EEF4FF;
+}
+
+.enroll-dot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background: #1B66E9;
+  margin-right: 16rpx;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+.enroll-text {
+  flex: 1;
+  color: #1B66E9;
+  font-size: 26rpx;
+}
+
+.cancel {
+  background: #FFFFFF;
+  color: #E5484D;
+}
+
+.fp-id {
+  font-weight: 700;
+  color: #1B66E9;
+  margin-right: 16rpx;
+}
+
+.fp-note {
+  font-size: 28rpx;
+}
+
+.empty {
+  text-align: center;
+}
