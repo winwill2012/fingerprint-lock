@@ -1,5 +1,8 @@
 package com.fingerprintlock.app.mqtt
 
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import com.fingerprintlock.app.settings.SettingsStore
 import com.hivemq.client.mqtt.MqttClient
 import com.hivemq.client.mqtt.datatypes.MqttQos
@@ -44,6 +47,13 @@ class MqttRepository(private val settingsStore: SettingsStore) {
     private var client: Mqtt3AsyncClient? = null
     private val connectedFlag = AtomicBoolean(false)
     private val listLock = Any()
+    private val presenceHandler = Handler(Looper.getMainLooper())
+    private val presenceCheck = object : Runnable {
+        override fun run() {
+            checkDevicePresence()
+            presenceHandler.postDelayed(this, PRESENCE_CHECK_INTERVAL_MS)
+        }
+    }
 
     @Volatile
     var connected: Boolean = false
@@ -65,6 +75,10 @@ class MqttRepository(private val settingsStore: SettingsStore) {
     @Volatile
     var fingerprintListReady: Boolean = false
         private set
+
+    /** 最近一次收到设备存活信号的时间（elapsedRealtime） */
+    @Volatile
+    private var lastDeviceSeenAtMs: Long = 0L
 
     /** 仅在用户主动删除/清空时允许列表变短 */
     private val pendingDeletedIds = mutableSetOf<Int>()
@@ -131,7 +145,10 @@ class MqttRepository(private val settingsStore: SettingsStore) {
                     authorityListPending = true
                     fingerprintListReady = false
                 }
+                lastDeviceSeenAtMs = 0L
+                deviceOnline = false
                 emit(MqttEvent.Connection(true, "已连接"))
+                startPresenceWatch()
                 c.subscribeWith()
                     .topicFilter(s.respTopic)
                     .qos(MqttQos.AT_LEAST_ONCE)
@@ -143,6 +160,7 @@ class MqttRepository(private val settingsStore: SettingsStore) {
     }
 
     fun disconnect(silent: Boolean = false) {
+        stopPresenceWatch()
         try {
             client?.disconnect()
         } catch (_: Exception) {
@@ -151,6 +169,7 @@ class MqttRepository(private val settingsStore: SettingsStore) {
         connected = false
         connectedFlag.set(false)
         deviceOnline = false
+        lastDeviceSeenAtMs = 0L
         if (!silent) emit(MqttEvent.Connection(false, "已断开"))
     }
 
@@ -192,6 +211,12 @@ class MqttRepository(private val settingsStore: SettingsStore) {
         }
         when (msg.optString("type")) {
             "status" -> {
+                // 遗嘱 / 主动离线
+                if (msg.has("online") && !msg.optBoolean("online")) {
+                    markDeviceOffline()
+                    return
+                }
+                noteDeviceAlive()
                 val reportedCount = when {
                     msg.has("fp_reg") -> msg.optInt("fp_reg", -1)
                     else -> msg.optInt("fp_count", -1)
@@ -199,7 +224,7 @@ class MqttRepository(private val settingsStore: SettingsStore) {
                 // 已有列表时，数量与指纹页保持一致，不被周期 status 打回旧值
                 val fpCount = if (fingerprintListReady) fingerprints.size else reportedCount
                 val st = DeviceStatus(
-                    online = msg.optBoolean("online"),
+                    online = true,
                     batteryMv = msg.optInt("battery_mv"),
                     batteryPct = msg.optInt("battery_pct"),
                     fpCount = fpCount,
@@ -208,26 +233,35 @@ class MqttRepository(private val settingsStore: SettingsStore) {
                     uptime = msg.optInt("uptime"),
                     ledBreath = if (msg.has("led_breath")) msg.optBoolean("led_breath") else null
                 )
-                deviceOnline = st.online
                 lastStatus = st
                 emit(MqttEvent.Status(st))
             }
-            "unlock" -> emit(
-                MqttEvent.Unlock(
-                    source = msg.optString("source"),
-                    fpId = msg.optInt("fp_id", -1),
-                    confidence = msg.optInt("confidence", -1)
+            "unlock" -> {
+                noteDeviceAlive()
+                emit(
+                    MqttEvent.Unlock(
+                        source = msg.optString("source"),
+                        fpId = msg.optInt("fp_id", -1),
+                        confidence = msg.optInt("confidence", -1)
+                    )
                 )
-            )
-            "enroll" -> emit(
-                MqttEvent.Enroll(
-                    phase = msg.optString("phase"),
-                    id = msg.optInt("id", -1),
-                    note = msg.optString("note")
+            }
+            "enroll" -> {
+                noteDeviceAlive()
+                emit(
+                    MqttEvent.Enroll(
+                        phase = msg.optString("phase"),
+                        id = msg.optInt("id", -1),
+                        note = msg.optString("note")
+                    )
                 )
-            )
-            "list" -> applyRemoteList(msg)
+            }
+            "list" -> {
+                noteDeviceAlive()
+                applyRemoteList(msg)
+            }
             "delete", "rename", "clear" -> {
+                noteDeviceAlive()
                 val type = msg.optString("type")
                 val phase = msg.optString("phase")
                 val id = msg.optInt("id", -1)
@@ -259,19 +293,65 @@ class MqttRepository(private val settingsStore: SettingsStore) {
                 }
                 emit(MqttEvent.Op(type = type, phase = phase, id = id, note = note))
             }
-            "led" -> emit(
-                MqttEvent.Op(
-                    type = msg.optString("type"),
-                    phase = msg.optString("phase"),
-                    id = msg.optInt("id", -1),
-                    note = msg.optString("note")
+            "led" -> {
+                noteDeviceAlive()
+                emit(
+                    MqttEvent.Op(
+                        type = msg.optString("type"),
+                        phase = msg.optString("phase"),
+                        id = msg.optInt("id", -1),
+                        note = msg.optString("note")
+                    )
                 )
-            )
-            "error" -> emit(
-                MqttEvent.Error(
-                    msg.optString("phase").ifEmpty { msg.optString("code") }
+            }
+            "error" -> {
+                noteDeviceAlive()
+                emit(
+                    MqttEvent.Error(
+                        msg.optString("phase").ifEmpty { msg.optString("code") }
+                    )
                 )
-            )
+            }
+            "scan" -> noteDeviceAlive()
+        }
+    }
+
+    /** 收到设备任意上报，刷新存活时间戳 */
+    private fun noteDeviceAlive() {
+        lastDeviceSeenAtMs = SystemClock.elapsedRealtime()
+        if (!deviceOnline) {
+            deviceOnline = true
+            val st = (lastStatus ?: DeviceStatus()).copy(online = true)
+            lastStatus = st
+            emit(MqttEvent.Status(st))
+        }
+    }
+
+    private fun markDeviceOffline() {
+        lastDeviceSeenAtMs = 0L
+        if (!deviceOnline && lastStatus?.online == false) return
+        deviceOnline = false
+        val st = (lastStatus ?: DeviceStatus()).copy(online = false)
+        lastStatus = st
+        emit(MqttEvent.Status(st))
+    }
+
+    private fun startPresenceWatch() {
+        presenceHandler.removeCallbacks(presenceCheck)
+        presenceHandler.postDelayed(presenceCheck, PRESENCE_CHECK_INTERVAL_MS)
+    }
+
+    private fun stopPresenceWatch() {
+        presenceHandler.removeCallbacks(presenceCheck)
+    }
+
+    /** 超过 15s 未收到设备消息 → 判离线（配合固件 5s 心跳） */
+    private fun checkDevicePresence() {
+        if (!connected || !deviceOnline) return
+        val last = lastDeviceSeenAtMs
+        if (last <= 0L) return
+        if (SystemClock.elapsedRealtime() - last >= DEVICE_OFFLINE_AFTER_MS) {
+            markDeviceOffline()
         }
     }
 
@@ -334,8 +414,6 @@ class MqttRepository(private val settingsStore: SettingsStore) {
                 if (item.id in pendingDeletedIds) continue
                 byId[item.id] = item
             }
-            // 已确认清空前，若远端空列表且非 pendingClear，不要在上面提前 return
-            // 主动删除成功后由 Op 分支删本地；此处若远端更短，本地多出的仍保留
             val merged = byId.values.sortedBy { it.id }
             applyLocalListLocked(merged)
         }
@@ -354,5 +432,11 @@ class MqttRepository(private val settingsStore: SettingsStore) {
         fingerprintListReady = true
         lastStatus = lastStatus?.copy(fpCount = items.size) ?: DeviceStatus(fpCount = items.size)
         emit(MqttEvent.FingerprintList(items))
+    }
+
+    companion object {
+        /** 超过此时长无设备上报则判离线 */
+        private const val DEVICE_OFFLINE_AFTER_MS = 15_000L
+        private const val PRESENCE_CHECK_INTERVAL_MS = 2_000L
     }
 }

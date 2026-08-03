@@ -30,8 +30,6 @@
 #define FP_BAUD     57600 // 海凌科 ZW101 默认波特率 57600
 
 // ---------------- WiFi / RF ----------------
-// ★ 发射功率固定 8.5dBm（Arduino wifi_power_t 单位为 0.25dBm，8.5×4=34）
-#define WIFI_TX_POWER_QUARTER_DBM  34
 #define WIFI_CONNECT_TIMEOUT_MS    30000
 #define WIFI_RETRY_INTERVAL_MS     8000
 
@@ -49,10 +47,10 @@
 #define BAT_FULL_MV          4200
 #define BAT_EMPTY_MV         3000
 #define BAT_ADC_SAMPLES      32
-#define BAT_REPORT_INTERVAL_MS  15000
+#define BAT_REPORT_INTERVAL_MS  8000   // 8s 心跳；App 15s 无上报则离线
 
 // ---------------- 指纹库 ----------------
 #define FP_MAX_TEMPLATES   50       // ZW101 规格书容量为 50 枚
 #define ENROLL_TIMEOUT_MS  15000
 
-#define FW_VERSION "1.4.10"
+#define FW_VERSION "1.4.13"

@@ -262,8 +262,6 @@ void bleProvLoop() {
     // BLE 共存必须保持 modem sleep，禁止 setSleep(false)
     WiFi.setSleep(WIFI_PS_MIN_MODEM);
     WiFi.begin(gPendingSsid.c_str(), gPendingPass.c_str());
-    // 发射功率 8.5dBm（需在 STA 启动后设置）
-    WiFi.setTxPower((wifi_power_t)WIFI_TX_POWER_QUARTER_DBM);
 
     gConnectStartedMs = millis();
     gWaitingConnectResult = true;
@@ -275,11 +273,9 @@ void bleProvLoop() {
     wl_status_t st = WiFi.status();
     if (st == WL_CONNECTED) {
       gWaitingConnectResult = false;
-      WiFi.setTxPower((wifi_power_t)WIFI_TX_POWER_QUARTER_DBM);
-      Serial.printf("[wifi] 已连接 %s  IP=%s  tx=%d\n",
+      Serial.printf("[wifi] 已连接 %s  IP=%s\n",
                     WiFi.SSID().c_str(),
-                    WiFi.localIP().toString().c_str(),
-                    (int)WiFi.getTxPower());
+                    WiFi.localIP().toString().c_str());
       bleProvNotifyStatus();
     } else if (millis() - gConnectStartedMs > WIFI_CONNECT_TIMEOUT_MS) {
       gWaitingConnectResult = false;

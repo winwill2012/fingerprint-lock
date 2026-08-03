@@ -2,6 +2,7 @@ package com.fingerprintlock.app.ui
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -21,14 +22,20 @@ class SettingsFragment : Fragment() {
     private val settings get() = LockApp.instance.settings
     private val mqtt get() = LockApp.instance.mqtt
     private var ledUpdating = false
+    /** 用户刚拨动开关后，短时间内忽略 status 回写，避免旧状态把开关打回去 */
+    private var ledUserChangedAtMs = 0L
 
     private val listener: (MqttEvent) -> Unit = { event ->
         activity?.runOnUiThread {
             when (event) {
                 is MqttEvent.Connection -> renderConnChip(event.connected, event.message)
-                is MqttEvent.Status -> event.status.ledBreath?.let { syncLedSwitch(it) }
+                is MqttEvent.Status -> {
+                    if (SystemClock.elapsedRealtime() - ledUserChangedAtMs < 3000L) return@runOnUiThread
+                    event.status.ledBreath?.let { syncLedSwitch(it) }
+                }
                 is MqttEvent.Op -> {
                     if (event.type == "led") {
+                        ledUserChangedAtMs = 0L
                         syncLedSwitch(event.phase != "off")
                         if (event.note.startsWith("fail")) {
                             Toast.makeText(requireContext(), "灯控失败：${event.note}", Toast.LENGTH_LONG).show()
@@ -64,6 +71,7 @@ class SettingsFragment : Fragment() {
         }
         binding.swLedBreath.setOnCheckedChangeListener { _, checked ->
             if (ledUpdating) return@setOnCheckedChangeListener
+            ledUserChangedAtMs = SystemClock.elapsedRealtime()
             settings.saveLedBreath(checked)
             if (!mqtt.connected) {
                 Toast.makeText(requireContext(), "MQTT 未连接，稍后会随状态同步", Toast.LENGTH_SHORT).show()

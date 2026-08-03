@@ -56,7 +56,6 @@ fingerprint-lock/
 
 其他约定：
 
-- WiFi 发射功率固定 **8.5dBm**
 - 开锁脉冲默认 **300ms**（编译期禁止超过 500ms）
 - 固件版本见 `firmware/include/config.h` 中 `FW_VERSION`
 

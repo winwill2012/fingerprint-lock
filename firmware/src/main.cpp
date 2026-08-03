@@ -11,7 +11,6 @@
  * 功能：
  *   - 指纹模块工作在校验模式（1:N 搜索比对），识别成功即开锁
  *   - 手机 App 低功耗蓝牙（BLE）配网，WiFi 凭据存 NVS
- *   - WiFi 发射功率固定 8.5dBm
  *   - MQTT 远程开锁 / 指纹录入、删除、清空、列表、备注 / 状态与电量上报
  * ============================================================
  */
@@ -23,6 +22,7 @@
 #include <Preferences.h>
 #include <vector>
 #include <algorithm>
+#include <string.h>
 #include "config.h"
 #include "ble_prov.h"
 
@@ -68,6 +68,11 @@ static uint8_t lastLedModeRc = 0xFF;
 static uint8_t lastLedBlnRc = 0xFF;
 static bool ledEffectActive = false;  // 识别/录入提示灯效播放中
 static unsigned long ledEffectUntilMs = 0;
+
+void refreshFpCount();
+void publishFpList();
+void publishEvent(const char *type, const char *phase, int id, int extra, const char *note);
+void fpFlushRx();
 
 // ============================================================
 //  工具函数
@@ -310,19 +315,19 @@ bool fpSlotVerifiedEmpty(int id) {
   return true;
 }
 
-/** 删除单个模板并校验；失败不改注册表。 */
+/** 删除单个模板。deleteModel 成功即视为成功；校验仅作加强，失败不否决。 */
 bool fpDeleteTemplate(int id) {
   if (!fpReady) return false;
   for (int attempt = 0; attempt < 3; attempt++) {
+    fpFlushRx();
     uint8_t r = finger.deleteModel((uint16_t)id);
-    delay(40);
+    delay(50);
+    if (r == FINGERPRINT_OK) return true;
+    // 槽位本就为空
     if (fpSlotVerifiedEmpty(id)) return true;
-    // 部分模块删空槽也回 OK，再确认一次
-    if (r == FINGERPRINT_OK) {
-      delay(40);
-      if (fpSlotVerifiedEmpty(id)) return true;
-    }
+    delay(30);
   }
+  // 最后再确认一次：已空也算删除成功
   return fpSlotVerifiedEmpty(id);
 }
 
@@ -530,12 +535,15 @@ bool applyLedBreath() { return applyLedIdle(); }
 void setLedBreath(bool on) {
   ledBreathEnabled = on;
   ledSavePref();
-  bool ok = applyLedIdle();
+  bool ok = false;
+  for (int i = 0; i < 2 && !ok; i++) {
+    ok = applyLedIdle();
+    if (!ok) delay(40);
+  }
   char note[24];
   snprintf(note, sizeof(note), "%s m%02Xb%02X", ok ? "ok" : "fail",
            lastLedModeRc, lastLedBlnRc);
   publishEvent("led", on ? "on" : "off", -1, -1, note);
-  publishStatus(true);
 }
 
 /** 识别/录入提示灯：无论是否开启待机呼吸，都手动播放，结束后恢复待机 */
@@ -576,7 +584,7 @@ void ledPlayWaitFinger() {
 }
 
 void ledMaintain() {
-  if (!fpReady || fpCmdBusy) return;
+  if (!fpReady || fpCmdBusy || enrollBusy) return;
 
   if (ledEffectActive) {
     if ((long)(millis() - ledEffectUntilMs) >= 0) {
@@ -586,11 +594,11 @@ void ledMaintain() {
     return;
   }
 
-  if (enrollBusy) return;
+  // 呼吸灯开启后不要周期性重发 ControlBLN，否则会打断识别/删除 UART
+  // 仅在关闭待机灯时偶尔确认熄灭
+  if (ledBreathEnabled) return;
 
-  // 待机态周期确认呼吸/熄灭
-  unsigned long interval = ledBreathEnabled ? 8000UL : 4000UL;
-  if (millis() - lastLedRefreshMs < interval) return;
+  if (millis() - lastLedRefreshMs < 15000UL) return;
   applyLedIdle();
 }
 
@@ -686,12 +694,14 @@ void enrollTick() {
 //  指纹扫描（校验模式：1:N 搜索比对）
 // ============================================================
 void scanFingerprint() {
-  if (fpCmdBusy) return;
+  if (fpCmdBusy || enrollBusy) return;
   static unsigned long lastScan = 0;
   unsigned long now = millis();
-  if (now - lastScan < 100) return;         // 轮询节流
+  if (now - lastScan < 120) return;         // 轮询节流
   lastScan = now;
 
+  // 灯控后清一下总线，避免残留应答干扰采图
+  fpFlushRx();
   uint8_t r = finger.getImage();
   if (r != FINGERPRINT_OK) return;          // 无手指 / 采集失败，忽略
   r = finger.image2Tz();
@@ -716,10 +726,13 @@ void scanFingerprint() {
 }
 
 // ============================================================
-//  MQTT 指令处理
+//  MQTT 指令处理（回调只入队，主循环执行，避免在 callback 里 publish 卡死）
 // ============================================================
-void onMqttMessage(char *topic, byte *payload, unsigned int len) {
-  (void)topic;
+static char mqttCmdBuf[768];
+static volatile unsigned mqttCmdLen = 0;
+static volatile bool mqttCmdPending = false;
+
+void handleMqttCommand(char *payload, unsigned int len) {
   DynamicJsonDocument doc(768);
   if (deserializeJson(doc, payload, len)) {
     Serial.println("[mqtt] 无法解析指令 JSON");
@@ -771,8 +784,12 @@ void onMqttMessage(char *topic, byte *payload, unsigned int len) {
       publishFpList();
       return;
     }
-    // 必须先删模块并校验成功，才改注册表（避免 App 列表空了还能开锁）
-    if (fpDeleteTemplate(id)) {
+    // 灯控让路，避免与删除抢 UART
+    bool prevBusy = fpCmdBusy;
+    fpCmdBusy = true;
+    bool ok = fpDeleteTemplate(id);
+    fpCmdBusy = prevBusy;
+    if (ok) {
       fpRemoveEntry(id);
       refreshFpCount();
       publishEvent("delete", "ok", id, -1, nullptr);
@@ -825,13 +842,45 @@ void onMqttMessage(char *topic, byte *payload, unsigned int len) {
   }
 }
 
+void onMqttMessage(char *topic, byte *payload, unsigned int len) {
+  (void)topic;
+  // 只入队：PubSubClient 禁止在 callback 内 publish，否则指令回执会极慢/失败
+  if (len >= sizeof(mqttCmdBuf)) len = sizeof(mqttCmdBuf) - 1;
+  memcpy(mqttCmdBuf, payload, len);
+  mqttCmdBuf[len] = '\0';
+  mqttCmdLen = len;
+  mqttCmdPending = true;
+}
+
+void drainMqttCommands() {
+  if (!mqttCmdPending) return;
+  mqttCmdPending = false;
+  unsigned len = mqttCmdLen;
+  char local[sizeof(mqttCmdBuf)];
+  memcpy(local, mqttCmdBuf, len + 1);
+  handleMqttCommand(local, len);
+}
+
 // ============================================================
 //  网络维护
 // ============================================================
-void applyWifiTxPower() {
-  // STA 已启动后设置；部分板子需在 begin 后再次确认
-  if (WiFi.getMode() & WIFI_MODE_STA) {
-    WiFi.setTxPower((wifi_power_t)WIFI_TX_POWER_QUARTER_DBM);
+void onWifiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
+  switch (event) {
+    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+      Serial.printf("[wifi] 已连接 IP=%s RSSI=%d\n",
+                    WiFi.localIP().toString().c_str(), WiFi.RSSI());
+      break;
+    case ARDUINO_EVENT_WIFI_STA_DISCONNECTED: {
+      uint8_t reason = info.wifi_sta_disconnected.reason;
+      Serial.printf("[wifi] 断开 reason=%u status=%d\n",
+                    reason, (int)WiFi.status());
+      break;
+    }
+    case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+      Serial.printf("[wifi] 关联成功 channel=%d\n", WiFi.channel());
+      break;
+    default:
+      break;
   }
 }
 
@@ -842,30 +891,21 @@ void startWifiFromNvs() {
     return;
   }
   WiFi.begin(ssid.c_str(), pass.c_str());
-  applyWifiTxPower();
-  Serial.printf("[wifi] 使用已存凭据连接 %s ...\n", ssid.c_str());
+  Serial.printf("[wifi] 使用已存凭据连接 %s (passLen=%u) ...\n",
+                ssid.c_str(), (unsigned)pass.length());
 }
 
 void ensureWiFi() {
-  if (WiFi.status() == WL_CONNECTED) {
-    // 偶发功率被改写时再钉一次
-    static unsigned long lastPowerCheck = 0;
-    if (millis() - lastPowerCheck > 60000) {
-      lastPowerCheck = millis();
-      applyWifiTxPower();
-    }
-    return;
-  }
+  if (WiFi.status() == WL_CONNECTED) return;
   if (!wifiHasCredentials()) return;
   if (millis() - lastWifiRetry < WIFI_RETRY_INTERVAL_MS) return;
   lastWifiRetry = millis();
-  Serial.println("[wifi] 尝试重连...");
+  Serial.printf("[wifi] 尝试重连... status=%d\n", (int)WiFi.status());
   WiFi.disconnect(false, false);
   delay(20);
   String ssid, pass;
   if (wifiLoadCredentials(ssid, pass)) {
     WiFi.begin(ssid.c_str(), pass.c_str());
-    applyWifiTxPower();
   }
 }
 
@@ -891,7 +931,12 @@ void handleNetwork() {
   ensureWiFi();
   if (WiFi.status() != WL_CONNECTED) return;
   mqttConnect();
-  if (mqtt.connected()) mqtt.loop();
+  if (mqtt.connected()) {
+    // 多泵几次，避免扫描/灯控间隙里指令积压
+    for (int i = 0; i < 5; i++) {
+      if (!mqtt.loop()) break;
+    }
+  }
 }
 
 // ============================================================
@@ -922,23 +967,25 @@ void setup() {
   // WiFi + BLE 共存：必须开启 modem sleep，否则 ESP32-C3 会 abort 重启
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(WIFI_PS_MIN_MODEM);
+  WiFi.onEvent(onWifiEvent);
 
   // BLE 配网（始终广播，便于首次配置与重新配网）
   bleProvBegin();
 
-  // 从 NVS 读取 BLE 写入的凭据；发射功率 8.5dBm
+  // 从 NVS 读取 BLE 写入的凭据
   startWifiFromNvs();
 
   configTime(8 * 3600, 0, "ntp.aliyun.com", "pool.ntp.org");
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(onMqttMessage);
   mqtt.setBufferSize(4096);   // 容纳指纹列表等大报文
-  mqtt.setKeepAlive(30);
+  mqtt.setKeepAlive(20);      // 与 App 15s 离线检测配合；过短易抖断
 }
 
 void loop() {
   bleProvLoop();
   handleNetwork();
+  drainMqttCommands();
   tickLock();
   ledMaintain();
 
