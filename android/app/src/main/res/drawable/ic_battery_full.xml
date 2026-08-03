@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 正极 -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M10,1.7h4v1.7h-4z" />
+    <!-- 外框厚 0.8：外缘 6.2/3.6~17.8/21.8，内缘 7.0/4.4~17.0/21.0 -->
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M6.2,3.6h11.6v18.2h-11.6zM7.0,4.4h10v16.6h-10z" />
+    <!-- 满电：四边与内缘均距 0.8 -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M7.8,5.2h8.4v15h-8.4z" />
+</vector>

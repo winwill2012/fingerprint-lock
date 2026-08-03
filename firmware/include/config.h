@@ -2,38 +2,38 @@
 /**
  * ============================================================
  * 指纹锁 ESP32-C3 固件配置
- * 使用前请修改：WiFi 账号密码、MQTT 服务器、主题、可选密钥
+ * WiFi 通过手机 App BLE 配网写入 NVS，此处不再硬编码账号密码
  * ============================================================
  */
 
-// ---------------- 无线网络 ----------------
-#define WIFI_SSID       "你的WiFi名称"
-#define WIFI_PASSWORD   "你的WiFi密码"
-
 // ---------------- MQTT ----------------
-// 默认使用公共测试 Broker（broker.emqx.io），仅用于功能调试！
-// 生产环境请务必换成自建 / 商业 Broker，并建议启用 TLS（端口 8883）
-#define MQTT_HOST       "broker.emqx.io"
+// App 端同样使用 TCP：tcp://iot.welinklab.com:1883
+#define MQTT_HOST       "iot.welinklab.com"
 #define MQTT_PORT       1883
-#define MQTT_USERNAME   ""
-#define MQTT_PASSWORD   ""
+#define MQTT_USERNAME   "wl_wdjbr6wp2tzaq"
+#define MQTT_PASSWORD   "VVwFcmYIB8kaE1GX_1mb2qHH4ZLQsE_P"
 #define MQTT_CLIENT_ID  "fp-lock-esp32c3"
 
-// 主题：小程序端"设置"页默认配置与此保持一致
-#define MQTT_CMD_TOPIC   "lock/esp32c3/cmd"        // 指令下发（设备订阅）
-#define MQTT_RESP_TOPIC  "lock/esp32c3/cmd/resp"   // 状态/事件反馈（设备发布）
+// 主题：与 App「设置」页默认配置保持一致
+#define MQTT_CMD_TOPIC   "welink/wl_wdjbr6wp2tzaq/fingerprint-lock-cmd"
+#define MQTT_RESP_TOPIC  "welink/wl_wdjbr6wp2tzaq/fingerprint-lock-upload"
 
 // 可选：命令密钥。不为空时，所有指令必须携带相同的 key 字段，否则拒绝执行
-// 注意：MQTT 明文传输，这只是基础防护，请务必配合 TLS + 私有 Broker 使用
 #define MQTT_CMD_KEY    ""
 
 // ---------------- 引脚 ----------------
-#define PIN_FP_RX   4     // 指纹模块 TX  -> 本引脚 (IO4, ESP32 串口 RX)
-#define PIN_FP_TX   5     // 指纹模块 RX  <- 本引脚 (IO5, ESP32 串口 TX)
+#define PIN_FP_RX   4     // 指纹模块 TX  -> 本引脚 (IO4, UART1 RX)
+#define PIN_FP_TX   5     // 指纹模块 RX  <- 本引脚 (IO5, UART1 TX)
 #define PIN_LOCK    0     // 电子锁控制（高电平开锁），必须经三极管/MOS/继电器驱动
 #define PIN_BAT     3     // 电池电压采样 ADC（IO3 = ADC1_CH3）
 
-#define FP_BAUD     57600 // 指纹模块波特率（海凌科 AS608/R307 默认 57600，个别为 9600）
+#define FP_BAUD     57600 // 海凌科 ZW101 默认波特率 57600
+
+// ---------------- WiFi / RF ----------------
+// ★ 发射功率固定 8.5dBm（Arduino wifi_power_t 单位为 0.25dBm，8.5×4=34）
+#define WIFI_TX_POWER_QUARTER_DBM  34
+#define WIFI_CONNECT_TIMEOUT_MS    30000
+#define WIFI_RETRY_INTERVAL_MS     8000
 
 // ---------------- 开锁 ----------------
 // ★★★ 电子锁通电时间不得超过 500ms，默认 300ms 留出安全余量 ★★★
@@ -48,11 +48,11 @@
 #define BAT_DIVIDER          2.0f
 #define BAT_FULL_MV          4200
 #define BAT_EMPTY_MV         3000
-#define BAT_ADC_SAMPLES      32                 // 多次采样取平均，降低 WiFi 干扰
-#define BAT_REPORT_INTERVAL_MS  15000           // 状态心跳间隔
+#define BAT_ADC_SAMPLES      32
+#define BAT_REPORT_INTERVAL_MS  15000
 
 // ---------------- 指纹库 ----------------
-#define FP_MAX_TEMPLATES   100      // 本固件允许的最大指纹模板数（AS608 模块上限 200）
-#define ENROLL_TIMEOUT_MS  15000    // 录入流程中每一步的超时时间
+#define FP_MAX_TEMPLATES   50       // ZW101 规格书容量为 50 枚
+#define ENROLL_TIMEOUT_MS  15000
 
-#define FW_VERSION "1.0.0"
+#define FW_VERSION "1.4.10"

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#0F766E</color>
+    <color name="primary_dark">#0D5F59</color>
+    <color name="primary_soft">#CCFBF1</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="bg">#F0F4F3</color>
+    <color name="bg_top">#D8EDEA</color>
+    <color name="card">#FFFFFF</color>
+    <color name="text">#134E4A</color>
+    <color name="text_secondary">#5B7A76</color>
+    <color name="danger">#DC2626</color>
+    <color name="success">#059669</color>
+    <color name="warning">#D97706</color>
+    <color name="tab_unselected">#8AA5A1</color>
+    <color name="divider">#E2EBE9</color>
+    <color name="unlock_ring">#E6F7F4</color>
+    <color name="unlock_ring_stroke">#B6EBE3</color>
+    <color name="unlock_halo">#330F766E</color>
+    <color name="unlock_btn_offline">#94A8A5</color>
+    <color name="ic_launcher_background">#FFFFFF</color>
+</resources>

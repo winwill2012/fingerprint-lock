@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">智能保险柜</string>
+    <string name="tab_home">首页</string>
+    <string name="tab_fingerprint">指纹</string>
+    <string name="tab_settings">设置</string>
+    <string name="ble_title">BLE 配网</string>
+    <string name="unlock">开锁</string>
+    <string name="unlock_hint_online">轻触远程开门</string>
+    <string name="unlock_hint_offline">设备离线，暂不可开锁</string>
+    <string name="refresh_status">刷新状态</string>
+    <string name="enroll">录入指纹</string>
+    <string name="cancel_enroll">取消</string>
+    <string name="clear_all">清空全部</string>
+    <string name="save">保存配置</string>
+    <string name="ble_provision">BLE 配网</string>
+    <string name="led_breath">指纹呼吸灯</string>
+</resources>

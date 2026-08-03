@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/unlockFragment">
+
+    <fragment
+        android:id="@+id/unlockFragment"
+        android:name="com.fingerprintlock.app.ui.UnlockFragment"
+        android:label="@string/tab_home" />
+
+    <fragment
+        android:id="@+id/fingerprintFragment"
+        android:name="com.fingerprintlock.app.ui.FingerprintFragment"
+        android:label="@string/tab_fingerprint" />
+
+    <fragment
+        android:id="@+id/settingsFragment"
+        android:name="com.fingerprintlock.app.ui.SettingsFragment"
+        android:label="@string/tab_settings" />
+</navigation>
